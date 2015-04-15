@@ -1,76 +1,145 @@
 part of server;
 
-class Posts extends Vane {
-  // Register the application pipeline
-  var pipeline = [Log, Cors, This];
+class Todo extends Vane {
+  /// Setup middleware handlers that should run ("This" is optional)
+  var pipeline = [Cors, Log, This];
 
-  // Set the collection name
-  String collectionName = "posts";
+  /// Get all items in list
+  @Route("/todos", method: GET)
+  Future getAll() {
+    log.info("Returing all items");
 
-  /// List all from collection "posts"
-  @Route("/posts/list", method: "GET")
-  Future list() {
     mongodb.then((mongodb) {
-      var postColl = mongodb.collection(collectionName);
+      var itemsColl = mongodb.collection("items");
 
-      // Find all posts but exclude _id from the results
-      postColl.find(where.excludeFields(["_id"])).toList().then((data) {
-        log.info("Got ${data.length} post(s)");
-        close(data);
+      itemsColl.find().toList().then((List<Map> items) {
+        log.info("Found ${items.length} item(s)");
+
+        // Show database content for debugging/testing purposes
+        printItems();
+
+        close(items);
       }).catchError((e) {
-        log.warning("Unable to get post(s): ${e}");
+        log.warning("Unable to find any items: ${e}");
         close(new List());
       });
     }).catchError((e) {
-      log.warning("Unable to get post(s): ${e}");
+      log.warning("Unable to find any items: ${e}");
       close(new List());
     });
 
-   return end;
+    return end;
   }
 
-  /// Add post to collection "posts"
-  @Route("/posts/add", method: POST)
+  /// Add a new item
+  @Route("/todos", methods: const [POST, OPTIONS])
   Future add() {
-    mongodb.then((mongodb) {
-      var postColl = mongodb.collection(collectionName);
+    log.info("Adding new item");
 
-      // Insert new post with data from the pre-processed json body
-      postColl.insert({"name": json["name"], "message": json["message"]}).then((data) {
-        log.info("Added post: $json");
-        close("Added post: $json");
+    // Parse item to make sure only objects of type "Item" is accepted
+    var newItem = new Item.fromJson(json);
+
+    print("");
+    print('json    = $json');
+    print('newItem = $newItem');
+    print("");
+
+    // Add item to database
+    mongodb.then((mongodb) {
+      var itemsColl = mongodb.collection("items");
+
+      itemsColl.insert(newItem.toJson()).then((dbRes) {
+        log.info("Mongodb: ${dbRes}");
+
+        // Show database content for debugging/testing purposes
+        printItems();
+
+        close("ok");
       }).catchError((e) {
-        log.warning("Unable to save post: ${e}");
-        close("Unable to save post");
+        log.warning("Unable to insert new item: ${e}");
+        close("error");
       });
     }).catchError((e) {
-      log.warning("Unable to save post: ${e}");
-      close("Unable to save post");
+      log.warning("Unable to insert new item: ${e}");
+      close("error");
     });
 
     return end;
   }
 
-  /// Remove all posts in collection "posts"
-  @Route("/posts/remove", method: DELETE)
-  Future remove() {
-    mongodb.then((mongodb) {
-      var postColl = mongodb.collection(collectionName);
+  /// Update existing item
+  @Route("/todos", method: PUT)
+  Future update() {
+    // Parse item to make sure only objects of type "Item" is accepted
+    var updatedItem = new Item.fromJson(json);
 
-      // Remove all posts
-      postColl.remove().then((data) {
-        log.info("Removed ${data["n"]} posts");
-        close("Removed ${data["n"]} posts");
+    log.info("Updating item ${updatedItem.id}");
+
+    // Add item to database
+    mongodb.then((mongodb) {
+      var itemsColl = mongodb.collection("items");
+
+      itemsColl.update({"id": updatedItem.id}, updatedItem.toJson()).then((dbRes) {
+        log.info("Mongodb: ${dbRes}");
+
+        // Show database content for debugging/testing purposes
+        printItems();
+
+        close("ok");
       }).catchError((e) {
-        log.warning("Unable to delete posts: ${e}");
-        close("Unable to delete posts");
+        log.warning("Unable to update item: ${e}");
+        close("error");
       });
     }).catchError((e) {
-      log.warning("Unable to delete posts: ${e}");
-      close("Unable to delete posts");
+      log.warning("Unable to update item: ${e}");
+      close("error");
     });
 
     return end;
+  }
+
+  /// Delete item from list
+  @Route("/todos", method: DELETE)
+  Future delete() {
+    log.info("Deleting item ${path[1]}");
+
+    // Add item to database
+    mongodb.then((mongodb) {
+      var itemsColl = mongodb.collection("items");
+
+      itemsColl.remove({"id": path[1]}).then((dbRes) {
+        log.info("Mongodb: ${dbRes}");
+
+        // Show database content for debugging/testing purposes
+        printItems();
+
+        close("ok");
+      }).catchError((e) {
+        log.warning("Unable to update item: ${e}");
+        close("error");
+      });
+    }).catchError((e) {
+      log.warning("Unable to update item: ${e}");
+      close("error");
+    });
+
+    return end;
+  }
+
+  /// Helper function printing all content of the database collection
+  void printItems() {
+
+    // Fetch all items from database and print to console
+    mongodb.then((mongodb) {
+      var itemsColl = mongodb.collection("items");
+
+      itemsColl.find().toList().then((List<Map> items) {
+        print("Todo items in the database:");
+        for(var i = 0; i < items.length; i++) {
+          print(' ${i+1}. ${items[i]["text"]}, done = ${items[i]["done"]}');
+        }
+        print("");
+      });
+    });
   }
 }
-
