@@ -1,6 +1,9 @@
 server:
 - url: /posts
   match: regex
+  
+- url: /todos
+  match: regex
 
 client:
 - url: /
